@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-ground text-ink font-sans text-[15px] antialiased;
+  }
+  h1, h2, h3 {
+    @apply font-display tracking-tight;
+  }
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-accent;
+  }
+}
+
+@layer components {
+  .page {
+    @apply mx-auto flex max-w-[1240px] flex-col gap-6 px-4 pb-12 pt-7 sm:px-6;
+  }
+  .card {
+    @apply rounded-[14px] bg-white p-5 sm:p-6;
+  }
+  .h1 {
+    @apply font-display text-[32px] font-bold leading-tight sm:text-[40px];
+  }
+  .h2 {
+    @apply font-display text-xl font-bold sm:text-[22px];
+  }
+  .kicker {
+    @apply text-[13px] font-semibold text-muted;
+  }
+  .label {
+    @apply text-[13px] font-semibold;
+  }
+  .input {
+    @apply min-h-[44px] w-full rounded-lg border border-edge bg-white px-3 font-sans text-[15px];
+  }
+  .btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] px-5 font-semibold disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white hover:bg-[#9A3412];
+  }
+  .btn-dark {
+    @apply btn bg-ink text-white hover:bg-[#2A303B];
+  }
+  .btn-outline {
+    @apply btn border border-edge bg-white text-ink hover:bg-ground;
+  }
+  .btn-sm {
+    @apply min-h-[36px] px-3 text-[13px];
+  }
+  .link {
+    @apply font-semibold underline-offset-2 hover:text-accent hover:underline;
+  }
+  .table-head {
+    @apply text-left text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+}
