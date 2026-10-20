@@ -1,6 +1,6 @@
 import 'server-only';
 import { db } from './supabase/admin';
-import type { Participant, TeamStanding } from './types';
+import type { TeamStanding } from './types';
 
 export async function getStandings(challengeId: string): Promise<TeamStanding[]> {
   const { data, error } = await db().from('team_scores').select('*').eq('challenge_id', challengeId);
@@ -14,15 +14,8 @@ export async function getStandings(challengeId: string): Promise<TeamStanding[]>
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
-export async function getParticipants(challengeId: string): Promise<Participant[]> {
-  const { data, error } = await db()
-    .from('participants')
-    .select('*')
-    .eq('challenge_id', challengeId)
-    .order('display_name');
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Participant[];
-}
+// Cached; see cached.ts.
+export { getParticipants } from './cached';
 
 // Points per participant across the whole challenge.
 export async function getPointsByParticipant(challengeId: string): Promise<Map<string, number>> {

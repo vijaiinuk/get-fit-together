@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { createAuthClient } from '@/lib/supabase/server';
+import { linkParticipant } from '@/lib/link';
 
 const OTP_TYPES: EmailOtpType[] = ['email', 'magiclink', 'signup', 'invite', 'recovery', 'email_change'];
 
@@ -32,6 +33,11 @@ export async function GET(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.redirect(new URL('/login?error=link', url.origin));
+  } else {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) await linkParticipant(user.id, user.email);
   }
   return NextResponse.redirect(new URL('/', url.origin));
 }

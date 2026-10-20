@@ -10,7 +10,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   return (
     <main className="flex min-h-screen flex-col">
-      <div className="bg-ink px-6 py-4 text-white">
+      <div className="bg-ink px-6 pb-4 pt-[calc(1rem+env(safe-area-inset-top))] text-white">
         <Logo />
       </div>
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 py-12">

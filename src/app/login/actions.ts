@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { createAuthClient } from '@/lib/supabase/server';
 import { db } from '@/lib/supabase/admin';
+import { linkParticipant } from '@/lib/link';
 
 export type LoginState = { sent?: string; error?: string };
 
@@ -58,10 +59,11 @@ export async function verifyCode(_prev: LoginState, form: FormData): Promise<Log
   if (!/^\d{6,10}$/.test(token)) return { sent: email, error: 'Enter the code from the email (numbers only).' };
 
   const supabase = await createAuthClient();
-  const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+  const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
   if (error) {
     console.error('[login] verifyOtp failed', error.status, error.code, error.message);
     return { sent: email, error: 'That code didn’t work. It may have expired, so ask for a new email.' };
   }
+  if (data.user) await linkParticipant(data.user.id, data.user.email);
   redirect('/');
 }

@@ -31,9 +31,9 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refreshes the session cookie if needed and checks it. Local check with asymmetric JWT keys.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims.sub ?? null;
 
   const path = request.nextUrl.pathname;
   const isPublic = path.startsWith('/login') || path.startsWith('/auth');
@@ -47,5 +47,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|apple-icon|icon|.*\\.(?:svg|png|jpg|jpeg|webp)$).*)'],
 };

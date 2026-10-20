@@ -1,5 +1,6 @@
 import { requireAdmin } from '@/lib/context';
 import { db } from '@/lib/supabase/admin';
+import { getActivityTypes } from '@/lib/cached';
 import { getParticipants, signedProofUrls } from '@/lib/data';
 import { formatDay } from '@/lib/dates';
 import { formatQuantity, thresholdLabel } from '@/lib/format';
@@ -16,7 +17,7 @@ export default async function AdminPage() {
   const d = db();
   const teamIds = ctx.teams.map((t) => t.id).concat('00000000-0000-0000-0000-000000000000');
   const [typesRes, flaggedRes, penaltiesRes, participants, flaggedGwRes] = await Promise.all([
-    d.from('activity_types').select('*').eq('challenge_id', c.id).order('sort').order('name'),
+    getActivityTypes(c.id).then((data) => ({ data })),
     d.from('entry_scores').select('*').eq('challenge_id', c.id).eq('status', 'flagged').order('entry_date'),
     d.from('penalties').select('*').in('team_id', teamIds).order('created_at', { ascending: false }),
     getParticipants(c.id),

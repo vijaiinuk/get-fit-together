@@ -1,5 +1,5 @@
 import { getContext } from '@/lib/context';
-import { db } from '@/lib/supabase/admin';
+import { getActivityTypes } from '@/lib/cached';
 import { formatLongDay } from '@/lib/dates';
 import { thresholdLabel } from '@/lib/format';
 import type { ActivityType } from '@/lib/types';
@@ -7,8 +7,7 @@ import type { ActivityType } from '@/lib/types';
 export default async function RulesPage() {
   const ctx = await getContext();
   const c = ctx.challenge;
-  const { data } = await db().from('activity_types').select('*').eq('challenge_id', c.id).eq('enabled', true).order('sort');
-  const types = (data ?? []) as ActivityType[];
+  const types: ActivityType[] = (await getActivityTypes(c.id)).filter((t) => t.enabled);
   const minuteTypes = types.filter((t) => t.unit === 'minutes');
   const stepTypes = types.filter((t) => t.unit === 'steps');
 

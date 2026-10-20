@@ -3,6 +3,7 @@ import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { createAuthClient } from './supabase/server';
 import { db } from './supabase/admin';
+import { getActiveChallenge, getParticipants, getTeams } from './cached';
 import { localDate } from './dates';
 import type { Challenge, Participant, Team } from './types';
 
@@ -11,6 +12,7 @@ export type Ctx = {
   email: string | null;
   challenge: Challenge;
   me: Participant;
+  people: Participant[];
   teams: Team[];
   myTeam: Team | null;
   isAdmin: boolean;
@@ -20,60 +22,54 @@ export type Ctx = {
 };
 
 // Works out who is signed in, which participant they are, and what roles they hold.
-// The first time someone signs in, their account is linked to the participant with their email.
+// Uses getClaims(): with asymmetric JWT signing keys it verifies the session locally, without a
+// round trip to Supabase Auth. With the legacy shared secret it falls back to asking the server.
 export const getContext = cache(async (): Promise<Ctx> => {
   const auth = await createAuthClient();
-  const {
-    data: { user },
-  } = await auth.auth.getUser();
-  if (!user) redirect('/login');
+  const { data: claimsData } = await auth.auth.getClaims();
+  const userId = claimsData?.claims.sub;
+  if (!userId) redirect('/login');
+  const email = typeof claimsData?.claims.email === 'string' ? claimsData.claims.email.toLowerCase() : null;
 
-  const d = db();
-  const { data: challenge } = await d
-    .from('challenges')
-    .select('*')
-    .eq('is_active', true)
-    .order('starts_on', { ascending: false })
-    .limit(1)
-    .maybeSingle<Challenge>();
+  const challenge = await getActiveChallenge();
   if (!challenge) redirect('/not-on-list');
 
-  const email = user.email?.toLowerCase() ?? null;
-  let { data: me } = await d
-    .from('participants')
-    .select('*')
-    .eq('challenge_id', challenge.id)
-    .eq('user_id', user.id)
-    .maybeSingle<Participant>();
+  const [teams, people] = await Promise.all([getTeams(challenge.id), getParticipants(challenge.id)]);
+  let me = people.find((p) => p.user_id === userId) ?? null;
 
-  if (!me && email) {
-    const { data: match } = await d
+  if (!me) {
+    // Not in the cached list yet (first sign-in, or the cache is a few minutes old): ask the database.
+    const d = db();
+    const { data: byUser } = await d
       .from('participants')
       .select('*')
       .eq('challenge_id', challenge.id)
-      .eq('email', email)
-      .is('user_id', null)
+      .eq('user_id', userId)
       .maybeSingle<Participant>();
-    if (match) {
-      await d.from('participants').update({ user_id: user.id }).eq('id', match.id);
-      me = { ...match, user_id: user.id };
+    me = byUser;
+    if (!me && email) {
+      const { data: match } = await d
+        .from('participants')
+        .select('*')
+        .eq('challenge_id', challenge.id)
+        .eq('email', email)
+        .is('user_id', null)
+        .maybeSingle<Participant>();
+      if (match) {
+        await d.from('participants').update({ user_id: userId }).eq('id', match.id);
+        me = { ...match, user_id: userId };
+      }
     }
   }
   if (!me) redirect('/not-on-list');
-
-  const { data: teamRows } = await d
-    .from('teams')
-    .select('*')
-    .eq('challenge_id', challenge.id)
-    .order('name');
-  const teams = (teamRows ?? []) as Team[];
   const meId = me.id;
 
   return {
-    userId: user.id,
+    userId,
     email,
     challenge,
     me,
+    people,
     teams,
     myTeam: teams.find((t) => t.id === me!.team_id) ?? null,
     isAdmin: me.is_admin,

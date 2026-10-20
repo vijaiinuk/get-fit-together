@@ -2,35 +2,66 @@ import Link from 'next/link';
 import { getContext } from '@/lib/context';
 import { db } from '@/lib/supabase/admin';
 import { getStandings } from '@/lib/data';
+import { getActivityTypes } from '@/lib/cached';
 import { addDays, daysBetween, formatDay, formatLongDay, minutesUntilMidnight } from '@/lib/dates';
 import { entryStatusLabel, formatQuantity, plural } from '@/lib/format';
-import type { ActivityType, EntryScore } from '@/lib/types';
+import type { EntryScore } from '@/lib/types';
 import { EntryForm } from './EntryForm';
+import { TeamCard } from '@/components/TeamCard';
 
 export default async function HomePage() {
   const ctx = await getContext();
   const d = db();
   const { challenge, me, today } = ctx;
 
-  const [typesRes, myEntriesRes, standings, broadcastRes, groupRes] = await Promise.all([
-    d.from('activity_types').select('*').eq('challenge_id', challenge.id).eq('enabled', true).order('sort'),
+  const nothing = Promise.resolve({ count: 0 as number | null });
+  const myTeamId = ctx.myTeam?.id;
+  const captainTeamId = ctx.captainOf?.id;
+  const teamIds = ctx.teams.map((t) => t.id);
+
+  // Everything the page needs, fetched in one parallel batch. Names, teams and activity types come
+  // from the request context and cache, so they cost no extra queries.
+  const [
+    allTypes,
+    myEntriesRes,
+    standings,
+    broadcastRes,
+    groupRes,
+    teamLoggedRes,
+    captainScorecardRes,
+    toModerateRes,
+    flaggedEntriesRes,
+    flaggedGroupsRes,
+  ] = await Promise.all([
+    getActivityTypes(challenge.id),
     d.from('entry_scores').select('*').eq('participant_id', me.id).order('entry_date', { ascending: false }),
     getStandings(challenge.id),
-    ctx.myTeam
+    myTeamId
       ? d
           .from('posts')
           .select('body, created_at, author_id')
           .eq('kind', 'broadcast')
-          .eq('team_id', ctx.myTeam.id)
+          .eq('team_id', myTeamId)
           .eq('hidden', false)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     d.from('group_workout_participants').select('group_workout_id').eq('participant_id', me.id),
+    myTeamId ? d.from('entries').select('id', { count: 'exact', head: true }).eq('team_id', myTeamId).eq('entry_date', today) : nothing,
+    captainTeamId
+      ? d.from('scorecards').select('status').eq('team_id', captainTeamId).eq('score_date', today).maybeSingle()
+      : Promise.resolve({ data: null }),
+    ctx.moderates.length
+      ? d.from('scorecards').select('team_id', { count: 'exact', head: true }).in('team_id', ctx.moderates.map((t) => t.id)).eq('status', 'submitted')
+      : nothing,
+    ctx.isAdmin
+      ? d.from('entries').select('id', { count: 'exact', head: true }).eq('challenge_id', challenge.id).eq('status', 'flagged')
+      : nothing,
+    ctx.isAdmin ? d.from('group_workouts').select('id', { count: 'exact', head: true }).in('team_id', teamIds).eq('status', 'flagged') : nothing,
   ]);
 
-  const types = (typesRes.data ?? []) as ActivityType[];
+  const types = allTypes.filter((t) => t.enabled);
   const entries = (myEntriesRes.data ?? []) as EntryScore[];
   const byDate = new Map(entries.map((e) => [e.entry_date, e]));
   const todayEntry = byDate.get(today);
@@ -60,42 +91,109 @@ export default async function HomePage() {
     return { date, mark: '0', label: e.quantity < e.threshold ? 'Too short' : 'Not counted', cls: 'bg-warnbg text-warn' };
   });
 
-  let broadcastAuthor = '';
-  if (broadcastRes.data) {
-    const { data: a } = await d.from('participants').select('display_name').eq('id', broadcastRes.data.author_id).maybeSingle();
-    broadcastAuthor = a?.display_name ?? 'Your captain';
-  }
+  const personById = new Map(ctx.people.map((p) => [p.id, p]));
+  const broadcastAuthor = broadcastRes.data ? personById.get(broadcastRes.data.author_id)?.display_name ?? 'Your captain' : '';
 
   // Role cards
-  let captainCard: { logged: number; size: number; submitted: boolean } | null = null;
-  if (ctx.captainOf) {
-    const [{ count: logged }, { count: size }, { data: sc }] = await Promise.all([
-      d.from('entries').select('id', { count: 'exact', head: true }).eq('team_id', ctx.captainOf.id).eq('entry_date', today),
-      d.from('participants').select('id', { count: 'exact', head: true }).eq('team_id', ctx.captainOf.id),
-      d.from('scorecards').select('status').eq('team_id', ctx.captainOf.id).eq('score_date', today).maybeSingle(),
-    ]);
-    captainCard = { logged: logged ?? 0, size: size ?? 0, submitted: !!sc };
-  }
-  let toModerate = 0;
-  if (ctx.moderates.length) {
-    const { count } = await d
-      .from('scorecards')
-      .select('team_id', { count: 'exact', head: true })
-      .in('team_id', ctx.moderates.map((t) => t.id))
-      .eq('status', 'submitted');
-    toModerate = count ?? 0;
-  }
-  let flagged = 0;
-  if (ctx.isAdmin) {
-    const [{ count }, { count: gwCount }] = await Promise.all([
-      d.from('entries').select('id', { count: 'exact', head: true }).eq('challenge_id', challenge.id).eq('status', 'flagged'),
-      d.from('group_workouts').select('id', { count: 'exact', head: true }).in('team_id', ctx.teams.map((t) => t.id)).eq('status', 'flagged'),
-    ]);
-    flagged = (count ?? 0) + (gwCount ?? 0);
+  const loggedToday = teamLoggedRes.count ?? 0;
+  const captainCard = ctx.captainOf
+    ? {
+        logged: loggedToday, // the captain's team is their own team
+        size: ctx.people.filter((p) => p.team_id === ctx.captainOf!.id).length,
+        submitted: !!captainScorecardRes.data,
+      }
+    : null;
+  const toModerate = toModerateRes.count ?? 0;
+  const flagged = (flaggedEntriesRes.count ?? 0) + (flaggedGroupsRes.count ?? 0);
+
+  // Your team: captain, moderator, standing and today's progress.
+  let teamCard: React.ReactNode = null;
+  if (ctx.myTeam) {
+    const t = ctx.myTeam;
+    const person = (id: string | null, withTeam: boolean) => {
+      const p = id ? personById.get(id) : undefined;
+      if (!p) return null;
+      return {
+        name: p.display_name,
+        isMe: p.id === me.id,
+        teamName: withTeam ? ctx.teams.find((x) => x.id === p.team_id)?.name ?? null : null,
+      };
+    };
+    const standing = standings.find((x) => x.team_id === t.id);
+    teamCard = (
+      <TeamCard
+        team={t}
+        rank={standing?.rank ?? null}
+        teamCount={standings.length}
+        average={standing?.average ?? 0}
+        members={standing?.member_count ?? 0}
+        loggedToday={loggedToday}
+        captain={person(t.captain_id, false)}
+        moderator={person(t.moderator_id, true)}
+        showToday={started && !ended}
+      />
+    );
   }
 
   const left = minutesUntilMidnight(challenge.timezone);
   const maxAvg = Math.max(daysSoFar, ...standings.map((s) => s.average), 1);
+
+  const highlights = (
+    <>
+      {teamCard}
+          {captainCard && (
+            <div className="flex flex-col gap-3 rounded-[14px] bg-ink p-6 text-white">
+              <div className="text-[13px] font-semibold text-[#FFC078]">As {ctx.captainOf!.name} captain</div>
+              <div className="font-display text-xl font-bold">
+                Today’s scorecard: {captainCard.logged} of {captainCard.size} logged
+              </div>
+              <div className="text-sm text-[#C9CED6]">
+                {captainCard.submitted ? 'Submitted. You can resubmit until midnight.' : 'Submit it before midnight.'}
+              </div>
+              <Link href="/scorecard" className="btn-primary">
+                Open scorecard
+              </Link>
+            </div>
+          )}
+          {ctx.moderates.length > 0 && (
+            <div className="flex flex-col gap-3 rounded-[14px] border border-[#FFD8A8] bg-[#FFF4E6] p-6">
+              <div className="text-[13px] font-semibold text-warn">
+                As moderator of {ctx.moderates.map((t) => t.name).join(', ')}
+              </div>
+              <div className="font-display text-xl font-bold">
+                {toModerate ? `${plural(toModerate, 'scorecard')} to verify` : 'Nothing to verify right now'}
+              </div>
+              <Link href="/moderate" className="btn-dark">
+                Open moderation
+              </Link>
+            </div>
+          )}
+          {ctx.isAdmin && flagged > 0 && (
+            <div className="card flex flex-col gap-3">
+              <div className="text-[13px] font-semibold text-muted">As admin</div>
+              <div className="font-display text-xl font-bold">{plural(flagged, 'item')} flagged by moderators</div>
+              <Link href="/admin" className="btn-dark">
+                Review flags
+              </Link>
+            </div>
+          )}
+
+          {broadcastRes.data && (
+            <div className="flex flex-col gap-2 rounded-[14px] bg-ink p-5 text-white">
+              <div className="flex items-center gap-2 text-[13px] font-bold text-[#FFC078]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1zM16 9a4 4 0 0 1 0 6" />
+                </svg>
+                From your captain, {broadcastAuthor}
+              </div>
+              <p className="whitespace-pre-line leading-relaxed">{broadcastRes.data.body}</p>
+              <Link href="/community" className="text-sm font-semibold text-[#FFC078] hover:underline">
+                Open community
+              </Link>
+            </div>
+          )}
+    </>
+  );
 
   return (
     <main className="page">
@@ -158,6 +256,9 @@ export default async function HomePage() {
             )}
           </div>
 
+          {/* On phones, team info and role actions come straight after today's upload. */}
+          <div className="flex flex-col gap-6 lg:hidden">{highlights}</div>
+
           <div className="card">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <h2 className="h2">My challenge</h2>
@@ -198,57 +299,7 @@ export default async function HomePage() {
         </div>
 
         <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-6">
-          {captainCard && (
-            <div className="flex flex-col gap-3 rounded-[14px] bg-ink p-6 text-white">
-              <div className="text-[13px] font-semibold text-[#FFC078]">As {ctx.captainOf!.name} captain</div>
-              <div className="font-display text-xl font-bold">
-                Today’s scorecard: {captainCard.logged} of {captainCard.size} logged
-              </div>
-              <div className="text-sm text-[#C9CED6]">
-                {captainCard.submitted ? 'Submitted. You can resubmit until midnight.' : 'Submit it before midnight.'}
-              </div>
-              <Link href="/scorecard" className="btn-primary">
-                Open scorecard
-              </Link>
-            </div>
-          )}
-          {ctx.moderates.length > 0 && (
-            <div className="flex flex-col gap-3 rounded-[14px] border border-[#FFD8A8] bg-[#FFF4E6] p-6">
-              <div className="text-[13px] font-semibold text-warn">
-                As moderator of {ctx.moderates.map((t) => t.name).join(', ')}
-              </div>
-              <div className="font-display text-xl font-bold">
-                {toModerate ? `${plural(toModerate, 'scorecard')} to verify` : 'Nothing to verify right now'}
-              </div>
-              <Link href="/moderate" className="btn-dark">
-                Open moderation
-              </Link>
-            </div>
-          )}
-          {ctx.isAdmin && flagged > 0 && (
-            <div className="card flex flex-col gap-3">
-              <div className="text-[13px] font-semibold text-muted">As admin</div>
-              <div className="font-display text-xl font-bold">{plural(flagged, 'item')} flagged by moderators</div>
-              <Link href="/admin" className="btn-dark">
-                Review flags
-              </Link>
-            </div>
-          )}
-
-          {broadcastRes.data && (
-            <div className="flex flex-col gap-2 rounded-[14px] bg-ink p-5 text-white">
-              <div className="flex items-center gap-2 text-[13px] font-bold text-[#FFC078]">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1zM16 9a4 4 0 0 1 0 6" />
-                </svg>
-                From your captain, {broadcastAuthor}
-              </div>
-              <p className="whitespace-pre-line leading-relaxed">{broadcastRes.data.body}</p>
-              <Link href="/community" className="text-sm font-semibold text-[#FFC078] hover:underline">
-                Open community
-              </Link>
-            </div>
-          )}
+          <div className="hidden lg:flex lg:flex-col lg:gap-6">{highlights}</div>
 
           <div className="card">
             <div className="flex items-baseline justify-between gap-3">

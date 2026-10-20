@@ -4,12 +4,14 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'FitLeague',
   description: 'Team fitness challenge for family and friends',
+  appleWebApp: { capable: true, title: 'FitLeague', statusBarStyle: 'black-translucent' },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: '#14181F',
+  viewportFit: 'cover', // lets the tab bar sit above the iPhone home indicator
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

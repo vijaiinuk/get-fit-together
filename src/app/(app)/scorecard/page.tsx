@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getContext } from '@/lib/context';
 import { db } from '@/lib/supabase/admin';
+import { getActivityTypes } from '@/lib/cached';
 import { getParticipants, signedProofUrls } from '@/lib/data';
 import { addDays, formatDay, formatLongDay, formatTime, isIsoDate, minutesUntilMidnight } from '@/lib/dates';
 import { entryStatusLabel, formatQuantity } from '@/lib/format';
@@ -24,7 +25,7 @@ export default async function ScorecardPage({ searchParams }: { searchParams: Pr
   const d = db();
   const [participants, typesRes, entriesRes, gwRes, scRes] = await Promise.all([
     getParticipants(ctx.challenge.id),
-    d.from('activity_types').select('*').eq('challenge_id', ctx.challenge.id).eq('enabled', true).order('sort'),
+    getActivityTypes(ctx.challenge.id).then((all) => ({ data: all.filter((t) => t.enabled) })),
     d.from('entry_scores').select('*').eq('team_id', team.id).eq('entry_date', date),
     d.from('group_workout_scores').select('*').eq('team_id', team.id).eq('workout_date', date).maybeSingle(),
     d.from('scorecards').select('*').eq('team_id', team.id).eq('score_date', date).maybeSingle(),

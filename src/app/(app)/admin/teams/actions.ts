@@ -1,12 +1,15 @@
 'use server';
 
 import { must, safe } from '@/lib/safe';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { CONFIG_TAG, PEOPLE_TAG } from '@/lib/cached';
 import { db } from '@/lib/supabase/admin';
 import { requireAdmin, type Ctx } from '@/lib/context';
 import { str } from '@/lib/guards';
 
 function done() {
+  revalidateTag(CONFIG_TAG);
+  revalidateTag(PEOPLE_TAG);
   revalidatePath('/', 'layout');
 }
 
