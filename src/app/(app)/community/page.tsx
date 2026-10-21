@@ -70,7 +70,7 @@ export default async function CommunityPage() {
           </ActionForm>
 
           {broadcasts.map((b) => (
-            <article key={b.id} className="flex flex-col gap-2 rounded-[14px] bg-ink p-5 text-white">
+            <article key={b.id} id={`post-${b.id}`} className="flex scroll-mt-24 flex-col gap-2 rounded-[14px] bg-ink p-5 text-white">
               <div className="flex flex-wrap items-center gap-2 text-[13px]">
                 <span className="font-bold text-[#FFC078]">Captain broadcast, {teamOf.get(b.team_id ?? '')?.name} only</span>
                 <span className="text-[#C9CED6]">
@@ -90,7 +90,7 @@ export default async function CommunityPage() {
             const liked = likes.some((r) => r.participant_id === ctx.me.id);
             const thread = comments.filter((c) => c.post_id === p.id);
             return (
-              <article key={p.id} className="card flex flex-col gap-3">
+              <article key={p.id} id={`post-${p.id}`} className="card flex scroll-mt-24 flex-col gap-3">
                 <div className="flex items-center gap-3">
                   <Avatar name={author?.display_name ?? '?'} src={author?.avatar_url} color={team ? tint(team.color) : undefined} size={40} />
                   <div className="min-w-0 flex-1">

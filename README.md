@@ -29,7 +29,7 @@ All of the numbers above can be changed in Admin.
 ### 1. Create the Supabase project
 
 1. Sign up at [supabase.com](https://supabase.com) and create a new project (free plan). Pick the region closest to most participants.
-2. Open **SQL Editor**, paste in `supabase/migrations/0001_schema.sql` and run it, then do the same with `0002_group_workout_flags.sql` and `0003_profiles.sql`, in that order.
+2. Open **SQL Editor**, paste in `supabase/migrations/0001_schema.sql` and run it, then do the same with `0002_group_workout_flags.sql`, `0003_profiles.sql` and `0004_notifications.sql`, in that order.
 3. Open `supabase/seed.sql` and change three things at the top:
    - `admin_email`: your email, in lower case
    - the challenge `starts_on` and `ends_on` dates

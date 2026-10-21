@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getContext } from '@/lib/context';
+import { db } from '@/lib/supabase/admin';
 import { Logo } from './Logo';
 import { NavLinks } from './NavLinks';
 import { BottomNav, type NavItem } from './BottomNav';
@@ -7,6 +8,9 @@ import { Avatar, tint } from './Avatar';
 
 export async function Header() {
   const ctx = await getContext();
+  // Unread notifications for the bell badge (one small query). 0 if migration 0004 hasn't run.
+  const { data: unreadData } = await db().rpc('member_unread_count', { p_participant: ctx.me.id });
+  const unread = typeof unreadData === 'number' ? unreadData : 0;
   const all: NavItem[] = [
     { href: '/', label: 'Home', icon: 'home' },
     ...(ctx.captainOf ? [{ href: '/scorecard', label: 'Scorecard', icon: 'scorecard' } as NavItem] : []),
@@ -50,7 +54,21 @@ export async function Header() {
           <div className="hidden flex-auto md:flex">
             <NavLinks links={desktop} />
           </div>
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1.5 md:gap-3">
+            <Link
+              href="/notifications"
+              aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'}
+              className="relative flex h-11 w-11 flex-none items-center justify-center rounded-lg text-[#C9CED6] hover:bg-[#2A303B] hover:text-white"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" />
+              </svg>
+              {unread > 0 && (
+                <span className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-bold text-white">
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
+            </Link>
             <Link href="/profile" aria-label="Your profile" className="flex min-w-0 items-center gap-2.5 rounded-lg py-1 hover:bg-[#2A303B] md:px-2">
               <div className="min-w-0 text-right leading-tight">
                 <div className="truncate font-semibold">{ctx.me.display_name}</div>
