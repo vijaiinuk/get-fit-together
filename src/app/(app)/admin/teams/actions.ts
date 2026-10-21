@@ -80,6 +80,23 @@ async function createTeamImpl(form: FormData) {
   done();
 }
 
+async function updateTeamImpl(form: FormData) {
+  const ctx = await requireAdmin();
+  const teamId = teamOrNull(ctx, str(form, 'team_id'));
+  if (!teamId) throw new Error('Team not found.');
+  const name = str(form, 'name').replace(/\s+/g, ' ').slice(0, 40);
+  if (!name) throw new Error('Enter a team name.');
+  const color = str(form, 'color');
+  const update: Record<string, string> = { name };
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) update.color = color;
+  const { error } = await db().from('teams').update(update).eq('id', teamId);
+  if (error) {
+    console.error('[updateTeam]', error);
+    throw new Error(error.code === '23505' ? 'Another team already has that name.' : 'Could not save the team. Try again.');
+  }
+  done();
+}
+
 async function setCaptainImpl(form: FormData) {
   const ctx = await requireAdmin();
   const teamId = teamOrNull(ctx, str(form, 'team_id'));
@@ -109,5 +126,6 @@ async function setModeratorImpl(form: FormData) {
 export const addParticipant = safe(addParticipantImpl);
 export const updateParticipant = safe(updateParticipantImpl);
 export const createTeam = safe(createTeamImpl);
+export const updateTeam = safe(updateTeamImpl);
 export const setCaptain = safe(setCaptainImpl);
 export const setModerator = safe(setModeratorImpl);

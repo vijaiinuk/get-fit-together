@@ -4,7 +4,7 @@ import { getParticipants } from '@/lib/data';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Pill } from '@/components/Pill';
 import { AdminTabs } from '../AdminTabs';
-import { addParticipant, createTeam, setCaptain, setModerator, updateParticipant } from './actions';
+import { addParticipant, createTeam, setCaptain, setModerator, updateParticipant, updateTeam } from './actions';
 import { ActionForm } from '@/components/ActionForm';
 
 export default async function AdminTeamsPage() {
@@ -45,17 +45,40 @@ export default async function AdminTeamsPage() {
           const others = participants.filter((p) => p.team_id && p.team_id !== t.id);
           return (
             <div key={t.id} className="card flex flex-col gap-3.5 border-t-[6px]" style={{ borderTopColor: t.color }}>
-              <div className="flex items-baseline justify-between">
-                <h2 className="h2">{t.name}</h2>
-                <span className="text-[13px] text-muted">{members.length} members</span>
-              </div>
+              <ActionForm action={updateTeam} className="flex flex-col gap-1.5">
+                <input type="hidden" name="team_id" value={t.id} />
+                <div className="flex items-baseline justify-between">
+                  <label htmlFor={`name-${t.id}`} className="label">
+                    Team name
+                  </label>
+                  <span className="text-[13px] text-muted">{members.length} members</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    id={`name-${t.id}`}
+                    name="name"
+                    defaultValue={t.name}
+                    required
+                    maxLength={40}
+                    className="input min-w-0 font-display text-lg font-bold"
+                  />
+                  <input
+                    name="color"
+                    type="color"
+                    defaultValue={t.color}
+                    aria-label={`Colour for ${t.name}`}
+                    className="h-11 w-12 flex-none cursor-pointer rounded-lg border border-edge bg-white p-1"
+                  />
+                  <SubmitButton className="btn-dark btn-sm">Save</SubmitButton>
+                </div>
+              </ActionForm>
               <ActionForm action={setCaptain} className="flex flex-col gap-1.5">
                 <input type="hidden" name="team_id" value={t.id} />
                 <label htmlFor={`cap-${t.id}`} className="label">
                   Captain
                 </label>
                 <div className="flex gap-2">
-                  <select id={`cap-${t.id}`} name="participant_id" defaultValue={t.captain_id ?? ''} className="input">
+                  <select id={`cap-${t.id}`} name="participant_id" defaultValue={t.captain_id ?? ''} className="input min-w-0">
                     <option value="">None</option>
                     {members.map((m) => (
                       <option key={m.id} value={m.id}>
@@ -72,16 +95,29 @@ export default async function AdminTeamsPage() {
                   Moderator
                 </label>
                 <div className="flex gap-2">
-                  <select id={`mod-${t.id}`} name="participant_id" defaultValue={t.moderator_id ?? ''} className="input">
+                  <select id={`mod-${t.id}`} name="participant_id" defaultValue={t.moderator_id ?? ''} className="input min-w-0">
                     <option value="">None</option>
-                    {others
-                      .sort((a, b) => Number(captains.has(b.id)) - Number(captains.has(a.id)) || a.display_name.localeCompare(b.display_name))
-                      .map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.display_name}
-                          {captains.has(m.id) ? ' (captain)' : ''}
-                        </option>
-                      ))}
+                    {/* Captains first (the usual choice), grouped so the names stay short. */}
+                    <optgroup label="Other teams’ captains">
+                      {others
+                        .filter((m) => captains.has(m.id))
+                        .sort((a, b) => a.display_name.localeCompare(b.display_name))
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.display_name}
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Other members">
+                      {others
+                        .filter((m) => !captains.has(m.id))
+                        .sort((a, b) => a.display_name.localeCompare(b.display_name))
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.display_name}
+                          </option>
+                        ))}
+                    </optgroup>
                   </select>
                   <SubmitButton className="btn-dark btn-sm">Set</SubmitButton>
                 </div>
