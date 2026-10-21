@@ -23,7 +23,14 @@ export type Participant = {
   id: string;
   challenge_id: string;
   team_id: string | null;
+  /** What the app shows: the member's alias if they set one, otherwise their name. */
   display_name: string;
+  /** The name the admin entered. Only set on rows from getParticipants()/getContext(). */
+  full_name?: string;
+  alias?: string | null;
+  avatar_path?: string | null;
+  /** Signed link to the profile picture. Only set on rows from getParticipants(). */
+  avatar_url?: string | null;
   email: string | null;
   user_id: string | null;
   is_admin: boolean;

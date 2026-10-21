@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { createAuthClient } from './supabase/server';
 import { db } from './supabase/admin';
-import { getActiveChallenge, getParticipants, getTeams } from './cached';
+import { getActiveChallenge, getParticipants, getTeams, toParticipant } from './cached';
 import { localDate } from './dates';
 import type { Challenge, Participant, Team } from './types';
 
@@ -35,7 +35,7 @@ export const getContext = cache(async (): Promise<Ctx> => {
   if (!challenge) redirect('/not-on-list');
 
   const [teams, people] = await Promise.all([getTeams(challenge.id), getParticipants(challenge.id)]);
-  let me = people.find((p) => p.user_id === userId) ?? null;
+  let me: Participant | null = people.find((p) => p.user_id === userId) ?? null;
 
   if (!me) {
     // Not in the cached list yet (first sign-in, or the cache is a few minutes old): ask the database.
@@ -46,7 +46,7 @@ export const getContext = cache(async (): Promise<Ctx> => {
       .eq('challenge_id', challenge.id)
       .eq('user_id', userId)
       .maybeSingle<Participant>();
-    me = byUser;
+    me = byUser ? toParticipant(byUser) : null;
     if (!me && email) {
       const { data: match } = await d
         .from('participants')
@@ -57,7 +57,7 @@ export const getContext = cache(async (): Promise<Ctx> => {
         .maybeSingle<Participant>();
       if (match) {
         await d.from('participants').update({ user_id: userId }).eq('id', match.id);
-        me = { ...match, user_id: userId };
+        me = toParticipant({ ...match, user_id: userId });
       }
     }
   }

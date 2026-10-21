@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Avatar, tint } from './Avatar';
 import { ordinal } from '@/lib/data';
 
-type Person = { name: string; isMe: boolean; teamName?: string | null } | null;
+type Person = { name: string; isMe: boolean; teamName?: string | null; avatarUrl?: string | null } | null;
 
 // "Who's who" for the signed-in member: their team, its captain and moderator, and how the team is doing.
 export function TeamCard({
@@ -87,7 +87,7 @@ export function TeamCard({
 function Role({ label, person, color, empty }: { label: string; person: Person; color: string; empty: string }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5 rounded-xl bg-ground p-3">
-      {person && <Avatar name={person.name} color={color} size={36} />}
+      {person && <Avatar name={person.name} color={color} size={36} src={person.avatarUrl} />}
       <div className="min-w-0">
         <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</dt>
         <dd className="truncate font-semibold">

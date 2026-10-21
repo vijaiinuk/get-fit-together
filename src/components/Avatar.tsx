@@ -1,6 +1,30 @@
 import { initials } from '@/lib/format';
 
-export function Avatar({ name, color = '#E7E9E3', size = 36 }: { name: string; color?: string; size?: number }) {
+export function Avatar({
+  name,
+  color = '#E7E9E3',
+  size = 36,
+  src,
+}: {
+  name: string;
+  color?: string;
+  size?: number;
+  src?: string | null;
+}) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        className="flex-none rounded-full bg-line object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <span
       aria-hidden="true"

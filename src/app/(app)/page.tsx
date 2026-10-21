@@ -116,6 +116,7 @@ export default async function HomePage() {
       return {
         name: p.display_name,
         isMe: p.id === me.id,
+        avatarUrl: p.avatar_url,
         teamName: withTeam ? ctx.teams.find((x) => x.id === p.team_id)?.name ?? null : null,
       };
     };

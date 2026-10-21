@@ -3,6 +3,7 @@ import { getContext } from '@/lib/context';
 import { Logo } from './Logo';
 import { NavLinks } from './NavLinks';
 import { BottomNav, type NavItem } from './BottomNav';
+import { Avatar, tint } from './Avatar';
 
 export async function Header() {
   const ctx = await getContext();
@@ -14,6 +15,7 @@ export async function Header() {
     { href: '/community', label: 'Community', icon: 'community' },
   ];
   const extra: NavItem[] = [
+    { href: '/profile', label: 'Profile', icon: 'profile' },
     { href: '/rules', label: 'Rules', icon: 'rules' },
     ...(ctx.isAdmin ? [{ href: '/admin', label: 'Admin', icon: 'admin' } as NavItem] : []),
   ];
@@ -49,10 +51,13 @@ export async function Header() {
             <NavLinks links={desktop} />
           </div>
           <div className="flex min-w-0 items-center gap-3">
-            <div className="min-w-0 text-right leading-tight">
-              <div className="truncate font-semibold">{ctx.me.display_name}</div>
-              <div className="truncate text-xs text-[#C9CED6]">{roles}</div>
-            </div>
+            <Link href="/profile" aria-label="Your profile" className="flex min-w-0 items-center gap-2.5 rounded-lg py-1 hover:bg-[#2A303B] md:px-2">
+              <div className="min-w-0 text-right leading-tight">
+                <div className="truncate font-semibold">{ctx.me.display_name}</div>
+                <div className="truncate text-xs text-[#C9CED6]">{roles}</div>
+              </div>
+              <Avatar name={ctx.me.display_name} src={ctx.me.avatar_url} color={ctx.myTeam ? tint(ctx.myTeam.color) : undefined} size={36} />
+            </Link>
             <form action="/auth/signout" method="post" className="hidden md:block">
               <button className="rounded-lg px-3 py-2 text-sm text-[#C9CED6] hover:bg-[#2A303B] hover:text-white">
                 Sign out

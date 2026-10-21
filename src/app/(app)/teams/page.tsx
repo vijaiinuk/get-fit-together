@@ -180,7 +180,10 @@ export default async function TeamsPage({ searchParams }: { searchParams: Promis
                 {members.map((m) => (
                   <tr key={m.id} className="border-t border-line">
                     <td className="py-2.5 pr-2">
-                      <span className="font-semibold">{m.display_name}</span>
+                      <span className="inline-flex items-center gap-2 align-middle">
+                        <Avatar name={m.display_name} src={m.avatar_url} color={tint(selected.color)} size={28} />
+                        <span className="font-semibold">{m.display_name}</span>
+                      </span>
                       {m.id === selected.captain_id && (
                         <span className="ml-1.5">
                           <Pill tone="dark">Captain</Pill>

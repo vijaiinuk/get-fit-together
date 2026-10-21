@@ -3,30 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createBrowser } from '@/lib/supabase/browser';
 import { createProofUpload } from '@/lib/proofs';
+import { decode } from '@/lib/image-client';
 
 const MAX_SIDE = 1280;
 const DIRECT_UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_DIRECT_BYTES = 2 * 1024 * 1024; // matches the bucket's file_size_limit
-
-// Decodes an image. createImageBitmap is fastest; <img> is the fallback for formats only the
-// browser's image pipeline understands (e.g. HEIC in Safari).
-async function decode(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; close: () => void }> {
-  try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-    return { source: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() };
-  } catch {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = new Image();
-      img.src = url;
-      await img.decode();
-      return { source: img, width: img.naturalWidth, height: img.naturalHeight, close: () => URL.revokeObjectURL(url) };
-    } catch {
-      URL.revokeObjectURL(url);
-      throw new Error('This image type can’t be read here. Take a screenshot of it, or choose a JPEG or PNG.');
-    }
-  }
-}
 
 // Shrinks the image in the browser (max 1280px, JPEG) so a month of proofs fits the free storage tier.
 // If the image can't be processed but is already small and in an accepted format, it's uploaded as is.

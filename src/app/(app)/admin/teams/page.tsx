@@ -123,7 +123,10 @@ export default async function AdminTeamsPage() {
             {participants.map((p) => (
               <ActionForm key={p.id} action={updateParticipant} className="grid grid-cols-[1.2fr_1.6fr_1fr_80px_90px_96px] items-center gap-3 border-t border-line py-2.5">
                 <input type="hidden" name="id" value={p.id} />
-                <input name="display_name" defaultValue={p.display_name} aria-label={`Name for ${p.display_name}`} className="input" required />
+                <div className="flex flex-col gap-0.5">
+                  <input name="display_name" defaultValue={p.full_name ?? p.display_name} aria-label={`Name for ${p.full_name ?? p.display_name}`} className="input" required />
+                  {p.alias && <span className="truncate text-xs text-muted">Shows as “{p.alias}”</span>}
+                </div>
                 <input name="email" type="email" defaultValue={p.email ?? ''} placeholder="name@example.com" aria-label={`Email for ${p.display_name}`} className="input" />
                 <select name="team_id" defaultValue={p.team_id ?? ''} aria-label={`Team for ${p.display_name}`} className="input">
                   {teamOptions}

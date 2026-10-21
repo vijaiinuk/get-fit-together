@@ -92,7 +92,7 @@ export default async function CommunityPage() {
             return (
               <article key={p.id} className="card flex flex-col gap-3">
                 <div className="flex items-center gap-3">
-                  <Avatar name={author?.display_name ?? '?'} color={team ? tint(team.color) : undefined} size={40} />
+                  <Avatar name={author?.display_name ?? '?'} src={author?.avatar_url} color={team ? tint(team.color) : undefined} size={40} />
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold">{author?.display_name ?? 'Former member'}</div>
                     <div className="text-[13px] text-muted">
@@ -128,7 +128,7 @@ export default async function CommunityPage() {
                 <div className="flex flex-col gap-2.5 border-t border-line pt-3">
                   {thread.map((c) => (
                     <div key={c.id} className="flex gap-2.5">
-                      <Avatar name={people.get(c.author_id)?.display_name ?? '?'} size={28} />
+                      <Avatar name={people.get(c.author_id)?.display_name ?? '?'} src={people.get(c.author_id)?.avatar_url} size={28} />
                       <div className="min-w-0 flex-1 rounded-[10px] bg-ground px-3 py-2">
                         <span className="font-semibold">{people.get(c.author_id)?.display_name ?? 'Former member'}</span> {c.body}
                       </div>

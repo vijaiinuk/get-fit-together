@@ -38,7 +38,13 @@ export default async function ModeratePage({ searchParams }: { searchParams: Pro
   ]);
   const entries = (entriesRes.data ?? []) as EntryScore[];
   const gw = gwRes.data as GroupWorkoutScore | null;
-  const nameOf = new Map(participants.map((p) => [p.id, p.display_name]));
+  // Moderators check that proofs match the person, so show "Alias (Name)" when someone uses an alias.
+  const nameOf = new Map(
+    participants.map((p) => [
+      p.id,
+      p.alias && p.full_name && p.alias !== p.full_name ? `${p.alias} (${p.full_name})` : p.display_name,
+    ]),
+  );
   const urls = await signedProofUrls([...entries.map((e) => e.proof_path), gw?.proof_path ?? '']);
   let gwNames: string[] = [];
   if (gw) {
