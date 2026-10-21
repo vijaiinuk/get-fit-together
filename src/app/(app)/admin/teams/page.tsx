@@ -4,8 +4,10 @@ import { getParticipants } from '@/lib/data';
 import { SubmitButton } from '@/components/SubmitButton';
 import { Pill } from '@/components/Pill';
 import { AdminTabs } from '../AdminTabs';
-import { addParticipant, createTeam, setCaptain, setModerator, updateParticipant, updateTeam } from './actions';
+import { addParticipant, createTeam, setCaptain, setModerator, updateParticipant, updateTeam, deleteTeam } from './actions';
 import { ActionForm } from '@/components/ActionForm';
+import { TeamNameEditor } from './TeamNameEditor';
+import { NewTeamCard } from './NewTeamCard';
 
 export default async function AdminTeamsPage() {
   const ctx = await requireAdmin();
@@ -45,33 +47,7 @@ export default async function AdminTeamsPage() {
           const others = participants.filter((p) => p.team_id && p.team_id !== t.id);
           return (
             <div key={t.id} className="card flex flex-col gap-3.5 border-t-[6px]" style={{ borderTopColor: t.color }}>
-              <ActionForm action={updateTeam} className="flex flex-col gap-1.5">
-                <input type="hidden" name="team_id" value={t.id} />
-                <div className="flex items-baseline justify-between">
-                  <label htmlFor={`name-${t.id}`} className="label">
-                    Team name
-                  </label>
-                  <span className="text-[13px] text-muted">{members.length} members</span>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    id={`name-${t.id}`}
-                    name="name"
-                    defaultValue={t.name}
-                    required
-                    maxLength={40}
-                    className="input min-w-0 font-display text-lg font-bold"
-                  />
-                  <input
-                    name="color"
-                    type="color"
-                    defaultValue={t.color}
-                    aria-label={`Colour for ${t.name}`}
-                    className="h-11 w-12 flex-none cursor-pointer rounded-lg border border-edge bg-white p-1"
-                  />
-                  <SubmitButton className="btn-dark btn-sm">Save</SubmitButton>
-                </div>
-              </ActionForm>
+              <TeamNameEditor team={t} members={members.length} action={updateTeam} deleteAction={deleteTeam} />
               <ActionForm action={setCaptain} className="flex flex-col gap-1.5">
                 <input type="hidden" name="team_id" value={t.id} />
                 <label htmlFor={`cap-${t.id}`} className="label">
@@ -125,18 +101,7 @@ export default async function AdminTeamsPage() {
             </div>
           );
         })}
-        <ActionForm action={createTeam} className="card flex flex-col gap-3 border-2 border-dashed border-edge">
-          <h2 className="h2">New team</h2>
-          <label htmlFor="team-name" className="label">
-            Name
-          </label>
-          <input id="team-name" name="name" required placeholder="e.g. Team E" className="input" />
-          <label htmlFor="team-color" className="label">
-            Colour
-          </label>
-          <input id="team-color" name="color" type="color" defaultValue="#0E7490" className="h-11 w-20 rounded-lg border border-edge" />
-          <SubmitButton>Create team</SubmitButton>
-        </ActionForm>
+        <NewTeamCard action={createTeam} />
       </section>
 
       <section className="card">

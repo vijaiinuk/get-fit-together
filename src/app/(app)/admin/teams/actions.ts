@@ -97,6 +97,42 @@ async function updateTeamImpl(form: FormData) {
   done();
 }
 
+// Deletes a team, but only an empty one with no history. The database would otherwise cascade the
+// delete to its entries, group workouts, scorecards, penalties and team news, erasing points for good.
+async function deleteTeamImpl(form: FormData) {
+  const ctx = await requireAdmin();
+  const teamId = teamOrNull(ctx, str(form, 'team_id'));
+  if (!teamId) throw new Error('Team not found.');
+  const d = db();
+  const count = async (table: string) => {
+    const { count, error } = await d.from(table).select('*', { count: 'exact', head: true }).eq('team_id', teamId);
+    if (error) throw new Error('Could not check the team. Try again.');
+    return count ?? 0;
+  };
+  const [members, entries, groups, penalties, posts] = await Promise.all([
+    count('participants'),
+    count('entries'),
+    count('group_workouts'),
+    count('penalties'),
+    count('posts'),
+  ]);
+  if (members) throw new Error(`Move its ${members} member${members === 1 ? '' : 's'} to another team first (in the Members list below).`);
+  const history = [
+    entries && `${entries} entr${entries === 1 ? 'y' : 'ies'}`,
+    groups && `${groups} group workout${groups === 1 ? '' : 's'}`,
+    penalties && `${penalties} penalt${penalties === 1 ? 'y' : 'ies'}`,
+    posts && `${posts} team news post${posts === 1 ? '' : 's'}`,
+  ].filter(Boolean);
+  if (history.length) {
+    throw new Error(`This team has ${history.join(', ')}. Deleting it would erase that history and its points, so it can't be deleted.`);
+  }
+  // Nobody should be left moderating or captaining a team that no longer exists.
+  await must(d.from('teams').update({ moderator_id: null, captain_id: null }).eq('id', teamId));
+  await must(d.from('scorecards').delete().eq('team_id', teamId));
+  await must(d.from('teams').delete().eq('id', teamId), 'Could not delete the team. Try again.');
+  done();
+}
+
 async function setCaptainImpl(form: FormData) {
   const ctx = await requireAdmin();
   const teamId = teamOrNull(ctx, str(form, 'team_id'));
@@ -127,5 +163,6 @@ export const addParticipant = safe(addParticipantImpl);
 export const updateParticipant = safe(updateParticipantImpl);
 export const createTeam = safe(createTeamImpl);
 export const updateTeam = safe(updateTeamImpl);
+export const deleteTeam = safe(deleteTeamImpl);
 export const setCaptain = safe(setCaptainImpl);
 export const setModerator = safe(setModeratorImpl);
