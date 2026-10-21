@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Avatar, tint } from './Avatar';
 import { ordinal } from '@/lib/data';
+import { score } from '@/lib/format';
 
 type Person = { name: string; isMe: boolean; teamName?: string | null; avatarUrl?: string | null } | null;
 
@@ -9,7 +10,7 @@ export function TeamCard({
   team,
   rank,
   teamCount,
-  average,
+  total,
   members,
   loggedToday,
   captain,
@@ -19,7 +20,7 @@ export function TeamCard({
   team: { id: string; name: string; color: string };
   rank: number | null;
   teamCount: number;
-  average: number;
+  total: number;
   members: number;
   loggedToday: number;
   captain: Person;
@@ -46,15 +47,15 @@ export function TeamCard({
       </div>
 
       <div className="flex flex-col gap-4 p-5 sm:p-6">
-        <dl className="grid grid-cols-2 gap-3">
+        <dl className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
           <Role label="Captain" person={captain} color={tint(team.color)} empty="Not chosen yet" />
           <Role label="Moderator" person={moderator} color="#E7E9E3" empty="Not assigned yet" />
         </dl>
 
         <div className="grid grid-cols-2 gap-3 border-t border-line pt-4 text-center">
           <div>
-            <div className="font-display text-2xl font-bold tabular-nums">{average.toFixed(1)}</div>
-            <div className="text-xs text-muted">avg points / member</div>
+            <div className={`font-display text-2xl font-bold tabular-nums ${total < 0 ? 'text-bad' : ''}`}>{score(total)}</div>
+            <div className="text-xs text-muted">team points</div>
           </div>
           <div>
             <div className="font-display text-2xl font-bold tabular-nums">{members}</div>
@@ -89,7 +90,7 @@ function Role({ label, person, color, empty }: { label: string; person: Person; 
     <div className="flex min-w-0 items-center gap-2.5 rounded-xl bg-ground p-3">
       {person && <Avatar name={person.name} color={color} size={36} src={person.avatarUrl} />}
       <div className="min-w-0">
-        <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</dt>
+        <dt className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</dt>
         <dd className="truncate font-semibold">
           {person ? (person.isMe ? `${person.name} (you)` : person.name) : <span className="font-normal text-muted">{empty}</span>}
         </dd>

@@ -32,6 +32,7 @@ export default async function TeamsPage({ searchParams }: { searchParams: Promis
   const selected =
     standings.find((s) => s.team_id === teamParam) ?? standings.find((s) => s.team_id === ctx.myTeam?.id) ?? standings[0];
   const nameOf = new Map(participants.map((p) => [p.id, p.display_name]));
+  const personOf = new Map(participants.map((p) => [p.id, p]));
   const members = participants
     .filter((p) => p.team_id === selected.team_id)
     .map((p) => ({ ...p, points: points.get(p.id) ?? 0 }))
@@ -87,8 +88,6 @@ export default async function TeamsPage({ searchParams }: { searchParams: Promis
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 15);
 
-  const captain = selected.captain_id ? nameOf.get(selected.captain_id) : null;
-  const moderator = selected.moderator_id ? nameOf.get(selected.moderator_id) : null;
   const dayNum = Math.max(0, Math.min(daysBetween(ctx.challenge.starts_on, ctx.today) + 1, daysBetween(ctx.challenge.starts_on, ctx.challenge.ends_on) + 1));
   const totalDays = daysBetween(ctx.challenge.starts_on, ctx.challenge.ends_on) + 1;
 
@@ -119,11 +118,19 @@ export default async function TeamsPage({ searchParams }: { searchParams: Promis
               <span className="font-display text-[32px] font-bold">
                 {s.average.toFixed(1)} <span className="text-sm font-medium text-muted">avg</span>
               </span>
-              <span className="text-[13px] text-muted">
-                {participants.find((p) => p.id === s.captain_id)?.display_name
-                  ? `Captain ${participants.find((p) => p.id === s.captain_id)?.display_name}, `
-                  : ''}
-                {s.member_count} members
+              <span className="mt-1 flex flex-col gap-0.5 border-t border-line pt-2 text-[13px]">
+                <span className="flex justify-between gap-2">
+                  <span className="text-muted">Captain</span>
+                  <span className="truncate font-semibold">{personOf.get(s.captain_id ?? '')?.display_name ?? '—'}</span>
+                </span>
+                <span className="flex justify-between gap-2">
+                  <span className="text-muted">Moderator</span>
+                  <span className="truncate font-semibold">{personOf.get(s.moderator_id ?? '')?.display_name ?? '—'}</span>
+                </span>
+                <span className="flex justify-between gap-2">
+                  <span className="text-muted">Members</span>
+                  <span className="font-semibold">{s.member_count}</span>
+                </span>
               </span>
             </Link>
           );
@@ -135,9 +142,29 @@ export default async function TeamsPage({ searchParams }: { searchParams: Promis
           <h2 className="font-display text-[28px] font-bold" style={{ color: selected.color }}>
             {selected.name}
           </h2>
-          <div className="mt-1 text-sm text-muted">
-            {captain ? `Captain ${captain}` : 'No captain yet'}
-            {moderator ? `, moderated by ${moderator}` : ''}
+          <div className="mt-3 flex flex-wrap gap-3">
+            {[
+              { label: 'Captain', person: personOf.get(selected.captain_id ?? ''), note: null as string | null, empty: 'Not chosen yet' },
+              {
+                label: 'Moderator',
+                person: personOf.get(selected.moderator_id ?? ''),
+                note: (() => {
+                  const m = personOf.get(selected.moderator_id ?? '');
+                  const t = m?.team_id ? ctx.teams.find((x) => x.id === m.team_id) : undefined;
+                  return t ? `from ${t.name}` : null;
+                })(),
+                empty: 'Not assigned yet',
+              },
+            ].map(({ label, person, note, empty }) => (
+              <div key={label} className="flex min-w-[180px] items-center gap-2.5 rounded-xl bg-ground px-3 py-2.5">
+                {person && <Avatar name={person.display_name} src={person.avatar_url} color={tint(selected.color)} size={36} />}
+                <div className="min-w-0 leading-tight">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</div>
+                  <div className="truncate font-semibold">{person ? person.display_name : <span className="font-normal text-muted">{empty}</span>}</div>
+                  {note && <div className="text-xs text-muted">{note}</div>}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
         <dl className="flex flex-wrap gap-6 tabular-nums">

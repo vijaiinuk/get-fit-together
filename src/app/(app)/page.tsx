@@ -3,11 +3,12 @@ import { getContext } from '@/lib/context';
 import { db } from '@/lib/supabase/admin';
 import { getStandings } from '@/lib/data';
 import { getActivityTypes } from '@/lib/cached';
-import { addDays, daysBetween, formatDay, formatLongDay, minutesUntilMidnight } from '@/lib/dates';
-import { entryStatusLabel, formatQuantity, plural } from '@/lib/format';
+import { addDays, daysBetween, formatDay, formatLongDay, formatTime, localDate, minutesUntilMidnight } from '@/lib/dates';
+import { entryStatusLabel, formatQuantity, plural, score } from '@/lib/format';
 import type { EntryScore } from '@/lib/types';
 import { EntryForm } from './EntryForm';
 import { TeamCard } from '@/components/TeamCard';
+import { Avatar, tint } from '@/components/Avatar';
 
 export default async function HomePage() {
   const ctx = await getContext();
@@ -32,6 +33,9 @@ export default async function HomePage() {
     toModerateRes,
     flaggedEntriesRes,
     flaggedGroupsRes,
+    todayEntriesRes,
+    todayGroupsRes,
+    recentPostsRes,
   ] = await Promise.all([
     getActivityTypes(challenge.id),
     d.from('entry_scores').select('*').eq('participant_id', me.id).order('entry_date', { ascending: false }),
@@ -39,7 +43,7 @@ export default async function HomePage() {
     myTeamId
       ? d
           .from('posts')
-          .select('body, created_at, author_id')
+          .select('id, body, created_at, author_id, comments(count), reactions(count)')
           .eq('kind', 'broadcast')
           .eq('team_id', myTeamId)
           .eq('hidden', false)
@@ -59,6 +63,18 @@ export default async function HomePage() {
       ? d.from('entries').select('id', { count: 'exact', head: true }).eq('challenge_id', challenge.id).eq('status', 'flagged')
       : nothing,
     ctx.isAdmin ? d.from('group_workouts').select('id', { count: 'exact', head: true }).in('team_id', teamIds).eq('status', 'flagged') : nothing,
+    // Today's activity for every team, for the standings.
+    d.from('entry_scores').select('team_id, points, status, quantity, threshold').eq('challenge_id', challenge.id).eq('entry_date', today),
+    d.from('group_workout_scores').select('team_id, team_points, status, participant_count').in('team_id', teamIds).eq('workout_date', today),
+    // Latest community posts with like and reply counts; filtered to today below.
+    d
+      .from('posts')
+      .select('id, author_id, body, created_at, comments(count), reactions(count)')
+      .eq('challenge_id', challenge.id)
+      .eq('kind', 'post')
+      .eq('hidden', false)
+      .order('created_at', { ascending: false })
+      .limit(20),
   ]);
 
   const types = allTypes.filter((t) => t.enabled);
@@ -126,7 +142,7 @@ export default async function HomePage() {
         team={t}
         rank={standing?.rank ?? null}
         teamCount={standings.length}
-        average={standing?.average ?? 0}
+        total={standing?.total ?? 0}
         members={standing?.member_count ?? 0}
         loggedToday={loggedToday}
         captain={person(t.captain_id, false)}
@@ -137,11 +153,112 @@ export default async function HomePage() {
   }
 
   const left = minutesUntilMidnight(challenge.timezone);
-  const maxAvg = Math.max(daysSoFar, ...standings.map((s) => s.average), 1);
 
-  const highlights = (
+  // Today per team: points already verified, plus entries still waiting for the moderator.
+  const todayByTeam = new Map<string, { points: number; pending: number }>();
+  const bump = (teamId: string, points: number, pending: number) => {
+    const t = todayByTeam.get(teamId) ?? { points: 0, pending: 0 };
+    todayByTeam.set(teamId, { points: t.points + points, pending: t.pending + pending });
+  };
+  for (const e of (todayEntriesRes.data ?? []) as { team_id: string; points: number; status: string; quantity: number; threshold: number }[]) {
+    bump(e.team_id, e.points, e.status === 'pending' && e.quantity >= e.threshold ? 1 : 0);
+  }
+  for (const g of (todayGroupsRes.data ?? []) as { team_id: string; team_points: number; status: string; participant_count: number }[]) {
+    bump(g.team_id, g.team_points, g.status === 'pending' && g.participant_count >= challenge.group_min_members ? challenge.group_team_bonus : 0);
+  }
+  const live = started && !ended;
+
+  const broadcastBlock = broadcastRes.data && (
+    <section aria-label="Team news" className="flex flex-col gap-2 rounded-[14px] bg-ink p-5 pl-6 text-white" style={{ boxShadow: `inset 6px 0 0 ${ctx.myTeam?.color ?? '#F08C4B'}` }}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+        <span className="flex items-center gap-2 font-bold text-[#FFC078]">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1zM16 9a4 4 0 0 1 0 6" />
+          </svg>
+          Team news from {broadcastAuthor}
+        </span>
+        <span className="text-[#C9CED6]">
+          {broadcastRes.data.created_at.slice(0, 10) === today ? 'today' : formatDay(broadcastRes.data.created_at.slice(0, 10))}
+        </span>
+      </div>
+      <p className="whitespace-pre-line text-base leading-relaxed">{broadcastRes.data.body}</p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        <Link href={`/community#post-${broadcastRes.data.id}`} className="font-semibold text-[#FFC078] hover:underline">
+          Like or reply
+        </Link>
+        {(() => {
+          const likes = (broadcastRes.data.reactions as { count: number }[] | undefined)?.[0]?.count ?? 0;
+          const replies = (broadcastRes.data.comments as { count: number }[] | undefined)?.[0]?.count ?? 0;
+          return likes || replies ? (
+            <span className="text-[#C9CED6]">
+              {[likes ? plural(likes, 'like') : null, replies ? plural(replies, 'reply', 'replies') : null].filter(Boolean).join(' · ')}
+            </span>
+          ) : null;
+        })()}
+      </div>
+    </section>
+  );
+
+  const standingsCard = (
+    <section aria-labelledby="standings" className="card min-w-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id="standings" className="h2 text-xl">
+          Standings
+        </h2>
+        <Link href="/teams" className="link text-sm">
+          See all teams
+        </Link>
+      </div>
+      <table className="mt-3 w-full table-fixed border-collapse text-[15px]">
+        <colgroup>
+          <col className="w-7" />
+          <col />
+          {live && <col className="w-[68px]" />}
+          <col className="w-14" />
+        </colgroup>
+        <thead>
+          <tr className="table-head">
+            <th className="py-2 pl-1 font-semibold">#</th>
+            <th className="py-2 font-semibold">Team</th>
+            {live && <th className="py-2 text-right font-semibold">Today</th>}
+            <th className="py-2 pr-1 text-right font-semibold">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {standings.map((st) => {
+            const t = todayByTeam.get(st.team_id) ?? { points: 0, pending: 0 };
+            const mine = st.team_id === ctx.myTeam?.id;
+            return (
+              <tr key={st.team_id} className={`border-t border-line ${mine ? 'bg-ground' : ''}`}>
+                <td className="py-2.5 pl-1 font-bold tabular-nums text-muted">{st.rank}</td>
+                <td className="py-2.5">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="h-3 w-3 flex-none rounded-full" style={{ background: st.color }} aria-hidden="true" />
+                    <span className={`truncate ${mine ? 'font-bold' : ''}`}>{st.name}</span>
+                  </span>
+                </td>
+                {live && (
+                  <td className="py-2.5 text-right tabular-nums leading-tight">
+                    <span className={t.points ? 'font-semibold text-ok' : 'text-muted'}>{score(t.points, true)}</span>
+                    {t.pending > 0 && <span className="block whitespace-nowrap text-[11px] text-muted">{t.pending} pending</span>}
+                  </td>
+                )}
+                <td className={`py-2.5 pr-1 text-right font-display text-lg font-bold tabular-nums ${st.total < 0 ? 'text-bad' : ''}`}>
+                  {score(st.total)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-3 text-[13px] text-muted">
+        Ranked by points per member, so bigger teams don’t get an advantage.{live ? ' Today’s points count once the moderator verifies them.' : ''}
+      </p>
+    </section>
+  );
+
+  const roleCards = (
     <>
-      {teamCard}
           {captainCard && (
             <div className="flex flex-col gap-3 rounded-[14px] bg-ink p-6 text-white">
               <div className="text-[13px] font-semibold text-[#FFC078]">As {ctx.captainOf!.name} captain</div>
@@ -178,24 +295,74 @@ export default async function HomePage() {
               </Link>
             </div>
           )}
-
-          {broadcastRes.data && (
-            <div className="flex flex-col gap-2 rounded-[14px] bg-ink p-5 text-white">
-              <div className="flex items-center gap-2 text-[13px] font-bold text-[#FFC078]">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1zM16 9a4 4 0 0 1 0 6" />
-                </svg>
-                From your captain, {broadcastAuthor}
-              </div>
-              <p className="whitespace-pre-line leading-relaxed">{broadcastRes.data.body}</p>
-              <Link href="/community" className="text-sm font-semibold text-[#FFC078] hover:underline">
-                Open community
-              </Link>
-            </div>
-          )}
     </>
   );
 
+  // Today's community posts (first 5), shown at the bottom of the page.
+  type RecentPost = { id: string; author_id: string; body: string; created_at: string; comments: { count: number }[]; reactions: { count: number }[] };
+  const todaysPosts = ((recentPostsRes.data ?? []) as RecentPost[])
+    .filter((p) => localDate(challenge.timezone, new Date(p.created_at)) === today)
+    .slice(0, 5);
+  const communityCard = (
+    <section aria-labelledby="community-today" className="card">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id="community-today" className="h2 text-xl">
+          Today in the community
+        </h2>
+        <Link href="/community" className="link text-sm">
+          Open community
+        </Link>
+      </div>
+      {todaysPosts.length === 0 ? (
+        <p className="mt-3 text-muted">
+          No posts yet today.{' '}
+          <Link href="/community" className="link text-ink">
+            Share how your workout went
+          </Link>
+        </p>
+      ) : (
+        <ul className="mt-2">
+          {todaysPosts.map((p) => {
+            const author = personById.get(p.author_id);
+            const team = author?.team_id ? ctx.teams.find((t) => t.id === author.team_id) : undefined;
+            const likes = p.reactions?.[0]?.count ?? 0;
+            const replies = p.comments?.[0]?.count ?? 0;
+            return (
+              <li key={p.id} className="border-t border-line first:border-t-0">
+                <Link href={`/community#post-${p.id}`} className="-mx-2 flex gap-3 rounded-lg px-2 py-3 hover:bg-ground">
+                  <Avatar name={author?.display_name ?? '?'} src={author?.avatar_url} color={team ? tint(team.color) : undefined} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-semibold">{author?.display_name ?? 'Former member'}</span>
+                      <span className="text-xs text-muted">
+                        {team?.name ? `${team.name} · ` : ''}
+                        {formatTime(p.created_at, challenge.timezone)}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 line-clamp-2 text-[15px]">{p.body}</p>
+                    {(likes > 0 || replies > 0) && (
+                      <p className="mt-1 text-xs text-muted">
+                        {[likes ? plural(likes, 'like') : null, replies ? plural(replies, 'reply', 'replies') : null].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+
+  // Same blocks in both layouts: on phones they follow today's upload; on wide screens they form the right column.
+  const sideBlocks = (
+    <>
+      {standingsCard}
+      {roleCards}
+      {teamCard}
+    </>
+  );
   return (
     <main className="page">
       <section>
@@ -204,6 +371,8 @@ export default async function HomePage() {
         </div>
         <h1 className="h1 mt-1.5">Hi {me.display_name.split(' ')[0]}</h1>
       </section>
+
+      {broadcastBlock}
 
       <section className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-6">
@@ -257,8 +426,8 @@ export default async function HomePage() {
             )}
           </div>
 
-          {/* On phones, team info and role actions come straight after today's upload. */}
-          <div className="flex flex-col gap-6 lg:hidden">{highlights}</div>
+          {/* On phones: standings, role actions and your team come straight after today's upload. */}
+          <div className="flex flex-col gap-6 lg:hidden">{sideBlocks}</div>
 
           <div className="card">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -299,33 +468,10 @@ export default async function HomePage() {
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-6">
-          <div className="hidden lg:flex lg:flex-col lg:gap-6">{highlights}</div>
-
-          <div className="card">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="h2 text-xl">Standings</h2>
-              <Link href="/teams" className="link text-sm">
-                See all teams
-              </Link>
-            </div>
-            <ol className="mt-4 flex flex-col gap-3">
-              {standings.map((s) => (
-                <li key={s.team_id} className="grid grid-cols-[24px_80px_minmax(0,1fr)_44px] items-center gap-2.5">
-                  <span className="font-bold text-muted">{s.rank}</span>
-                  <span className={s.team_id === ctx.myTeam?.id ? 'font-bold' : ''}>{s.name}</span>
-                  <span className="h-2.5 overflow-hidden rounded-full bg-line">
-                    <span className="block h-full" style={{ width: `${Math.min(100, (s.average / maxAvg) * 100)}%`, background: s.color }} />
-                  </span>
-                  <span className="text-right font-bold tabular-nums">{s.average.toFixed(1)}</span>
-                </li>
-              ))}
-            </ol>
-            <p className="mt-3.5 text-[13px] text-muted">Average points per member. Final standings at month end.</p>
-          </div>
-
-        </div>
+        <div className="hidden min-w-0 flex-[1_1_320px] flex-col gap-6 lg:flex">{sideBlocks}</div>
       </section>
+
+      {communityCard}
     </main>
   );
 }

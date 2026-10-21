@@ -22,7 +22,7 @@ export default async function CommunityPage() {
   ]);
   const posts = (postsRes.data ?? []) as Post[];
   const broadcasts = (broadcastsRes.data ?? []) as Post[];
-  const ids = posts.map((p) => p.id);
+  const ids = [...posts, ...broadcasts].map((p) => p.id);
   const [commentsRes, reactionsRes] = ids.length
     ? await Promise.all([
         d.from('comments').select('*').in('post_id', ids).order('created_at'),
@@ -36,6 +36,53 @@ export default async function CommunityPage() {
   const reactions = (reactionsRes.data ?? []) as { post_id: string; participant_id: string }[];
   const when = (ts: string) =>
     ts.slice(0, 10) === ctx.today ? `Today ${formatTime(ts, ctx.challenge.timezone)}` : formatDay(ts.slice(0, 10));
+
+  // Like button, comment thread and reply box, shared by posts and team news.
+  const engage = (p: Post, authorName: string) => {
+    const likes = reactions.filter((r) => r.post_id === p.id);
+    const liked = likes.some((r) => r.participant_id === ctx.me.id);
+    const thread = comments.filter((c) => c.post_id === p.id);
+    return (
+      <>
+        <div className="flex flex-wrap items-center gap-3">
+          <ActionForm action={toggleLike}>
+            <input type="hidden" name="post_id" value={p.id} />
+            <button
+              aria-pressed={liked}
+              className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-line px-3.5 font-semibold ${liked ? 'bg-warnbg' : 'bg-white'}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
+              </svg>
+              <span>{likes.length}</span>
+              <span className="sr-only">{liked ? 'Unlike' : 'Like'}</span>
+            </button>
+          </ActionForm>
+          <span className="text-[13px] text-muted">{thread.length === 1 ? '1 comment' : `${thread.length} comments`}</span>
+        </div>
+        <div className="flex flex-col gap-2.5 border-t border-line pt-3">
+          {thread.map((c) => (
+            <div key={c.id} className="flex gap-2.5">
+              <Avatar name={people.get(c.author_id)?.display_name ?? '?'} src={people.get(c.author_id)?.avatar_url} size={28} />
+              <div className="min-w-0 flex-1 rounded-[10px] bg-ground px-3 py-2">
+                <span className="font-semibold">{people.get(c.author_id)?.display_name ?? 'Former member'}</span> {c.body}
+              </div>
+            </div>
+          ))}
+          <ActionForm action={addComment} className="flex gap-2">
+            <input type="hidden" name="post_id" value={p.id} />
+            <label htmlFor={`c-${p.id}`} className="sr-only">
+              Comment on {authorName}’s post
+            </label>
+            <input id={`c-${p.id}`} name="body" required maxLength={1000} placeholder="Write a comment…" className="input flex-1" />
+            <SubmitButton className="btn-dark" pendingText="…">
+              Reply
+            </SubmitButton>
+          </ActionForm>
+        </div>
+      </>
+    );
+  };
 
   return (
     <main className="page">
@@ -70,14 +117,17 @@ export default async function CommunityPage() {
           </ActionForm>
 
           {broadcasts.map((b) => (
-            <article key={b.id} id={`post-${b.id}`} className="flex scroll-mt-24 flex-col gap-2 rounded-[14px] bg-ink p-5 text-white">
-              <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                <span className="font-bold text-[#FFC078]">Captain broadcast, {teamOf.get(b.team_id ?? '')?.name} only</span>
-                <span className="text-[#C9CED6]">
-                  {people.get(b.author_id)?.display_name}, {when(b.created_at)}
-                </span>
+            <article key={b.id} id={`post-${b.id}`} className="scroll-mt-24 overflow-hidden rounded-[14px] bg-white">
+              <div className="flex flex-col gap-2 bg-ink p-5 text-white">
+                <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                  <span className="font-bold text-[#FFC078]">Team news, {teamOf.get(b.team_id ?? '')?.name} only</span>
+                  <span className="text-[#C9CED6]">
+                    {people.get(b.author_id)?.display_name}, {when(b.created_at)}
+                  </span>
+                </div>
+                <p className="whitespace-pre-line text-base leading-relaxed">{b.body}</p>
               </div>
-              <p className="whitespace-pre-line text-base leading-relaxed">{b.body}</p>
+              <div className="flex flex-col gap-3 p-4 sm:p-5">{engage(b, people.get(b.author_id)?.display_name ?? 'your captain')}</div>
             </article>
           ))}
 
@@ -86,9 +136,6 @@ export default async function CommunityPage() {
           {posts.map((p) => {
             const author = people.get(p.author_id);
             const team = author?.team_id ? teamOf.get(author.team_id) : undefined;
-            const likes = reactions.filter((r) => r.post_id === p.id);
-            const liked = likes.some((r) => r.participant_id === ctx.me.id);
-            const thread = comments.filter((c) => c.post_id === p.id);
             return (
               <article key={p.id} id={`post-${p.id}`} className="card flex scroll-mt-24 flex-col gap-3">
                 <div className="flex items-center gap-3">
@@ -109,42 +156,7 @@ export default async function CommunityPage() {
                   )}
                 </div>
                 <p className="whitespace-pre-line leading-relaxed">{p.body}</p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <ActionForm action={toggleLike}>
-                    <input type="hidden" name="post_id" value={p.id} />
-                    <button
-                      aria-pressed={liked}
-                      className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-line px-3.5 font-semibold ${liked ? 'bg-warnbg' : 'bg-white'}`}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
-                      </svg>
-                      <span>{likes.length}</span>
-                      <span className="sr-only">{liked ? 'Unlike' : 'Like'}</span>
-                    </button>
-                  </ActionForm>
-                  <span className="text-[13px] text-muted">{thread.length === 1 ? '1 comment' : `${thread.length} comments`}</span>
-                </div>
-                <div className="flex flex-col gap-2.5 border-t border-line pt-3">
-                  {thread.map((c) => (
-                    <div key={c.id} className="flex gap-2.5">
-                      <Avatar name={people.get(c.author_id)?.display_name ?? '?'} src={people.get(c.author_id)?.avatar_url} size={28} />
-                      <div className="min-w-0 flex-1 rounded-[10px] bg-ground px-3 py-2">
-                        <span className="font-semibold">{people.get(c.author_id)?.display_name ?? 'Former member'}</span> {c.body}
-                      </div>
-                    </div>
-                  ))}
-                  <ActionForm action={addComment} className="flex gap-2">
-                    <input type="hidden" name="post_id" value={p.id} />
-                    <label htmlFor={`c-${p.id}`} className="sr-only">
-                      Comment on {author?.display_name}’s post
-                    </label>
-                    <input id={`c-${p.id}`} name="body" required maxLength={1000} placeholder="Write a comment…" className="input flex-1" />
-                    <SubmitButton className="btn-dark" pendingText="…">
-                      Reply
-                    </SubmitButton>
-                  </ActionForm>
-                </div>
+                {engage(p, author?.display_name ?? 'this')}
               </article>
             );
           })}
@@ -157,7 +169,7 @@ export default async function CommunityPage() {
               <span className="font-semibold">Everyone</span> posts, comments and reacts. Posts are visible to all teams.
             </p>
             <p>
-              <span className="font-semibold">Captains</span> broadcast to their own team. Broadcasts stay pinned for that team.
+              <span className="font-semibold">Captains</span> post team news to their own team. It stays pinned for that team, and teammates can like and reply.
             </p>
             <p>
               <span className="font-semibold">Admins</span> approve penalties and can hide posts.

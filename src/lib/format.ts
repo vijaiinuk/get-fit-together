@@ -32,3 +32,9 @@ export function initials(name: string): string {
 export function plural(n: number, one: string, many = one + 's'): string {
   return `${n} ${n === 1 ? one : many}`;
 }
+
+// Signed score with a real minus sign (U+2212). A hyphen renders short and loosely spaced in tabular figures.
+export function score(n: number, plus = false): string {
+  if (n < 0) return `\u2212${Math.abs(n)}`;
+  return plus ? `+${n}` : String(n);
+}
